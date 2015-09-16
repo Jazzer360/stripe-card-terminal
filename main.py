@@ -73,21 +73,19 @@ def add_card(win, customer, number, exp_month, exp_year, cvc=None):
 class MainFrame(wx.Frame):
     def __init__(self, *args, **kwargs):
         super(MainFrame, self).__init__(*args, **kwargs)
-        self.load_config()
         self.Bind(wx.EVT_CLOSE, self.on_close)
         self.Bind(EVT_CUSTOMERS_FETCHED, self.on_customers_fetched)
         self.Bind(EVT_CUSTOMER_DETAIL, self.on_detail_fetched)
 
-        hbox = wx.BoxSizer(wx.HORIZONTAL)
-
         self.customer_list = CustomerList(self)
-        hbox.Add(self.customer_list, 0, wx.EXPAND)
-
         self.customer_detail = CustomerDetail(self)
-        hbox.Add(self.customer_detail, 1, wx.EXPAND)
 
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        hbox.Add(self.customer_list, 0, wx.EXPAND)
+        hbox.Add(self.customer_detail, 1, wx.EXPAND)
         self.SetSizer(hbox)
         
+        self.load_config()
         self.load_customers()
         self.Fit()
 
@@ -139,24 +137,23 @@ class MainFrame(wx.Frame):
 class CustomerList(wx.Panel):
     def __init__(self, *args, **kwargs):
         super(CustomerList, self).__init__(*args, **kwargs)
-        vbox = wx.BoxSizer(wx.VERTICAL)
         
         label = wx.StaticText(self, label='Customers')
-        vbox.Add(label, 0, wx.ALIGN_CENTER|wx.ALL, 10)
-        
         self.listbox = wx.ListBox(self, style=wx.LB_SINGLE | wx.LB_SORT)
-        self.listbox.Bind(wx.EVT_LISTBOX, self.on_selection)
-        vbox.Add(self.listbox, 1, wx.EXPAND|wx.LEFT|wx.RIGHT, 10)
-
         add_button = wx.Button(self, label='Add Customer')
-        add_button.Bind(wx.EVT_BUTTON, self.on_add)
+        reload_button = wx.Button(self, label='Reload')
+        
+        vbox = wx.BoxSizer(wx.VERTICAL)
+        vbox.Add(label, 0, wx.ALIGN_CENTER|wx.ALL, 10)
+        vbox.Add(self.listbox, 1, wx.EXPAND|wx.LEFT|wx.RIGHT, 10)
         vbox.Add(add_button, 0, wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT, 10)
-
-        button = wx.Button(self, label='Reload')
-        button.Bind(wx.EVT_BUTTON, self.on_refresh)
-        vbox.Add(button, 0, wx.EXPAND|wx.ALL, 10)
+        vbox.Add(reload_button, 0, wx.EXPAND|wx.ALL, 10)
 
         self.SetSizer(vbox)
+
+        self.listbox.Bind(wx.EVT_LISTBOX, self.on_selection)
+        add_button.Bind(wx.EVT_BUTTON, self.on_add)
+        reload_button.Bind(wx.EVT_BUTTON, self.on_refresh)
 
     def set_customers(self, customers):
         self.customers = customers
