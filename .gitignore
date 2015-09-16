@@ -1,0 +1,4 @@
+settings.cfg
+*.sublime-project
+*.sublime-workspace
+*.pyc
