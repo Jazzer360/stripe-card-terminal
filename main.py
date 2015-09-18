@@ -47,7 +47,8 @@ def fetch_detail(win, customer):
         if not response.has_more:
             break
         lastid = response.data[-1].id
-        response = stripe.Charge.all(customer=id, starting_after=lastid)
+        response = stripe.Charge.all(customer=customer.id,
+            starting_after=lastid)
     wx.PostEvent(win, CustomerDetailEvent(
         customer=customer, cards=cards, charges=charges))
 
@@ -75,7 +76,8 @@ def create_charge(win, customer, card, amount, description):
         charge = stripe.Charge.create(currency='usd', customer=customer.id,
             source=card.id, amount=amount, description=description)
     except stripe.error.CardError, e:
-        wx.PostEvent(win, CreateChargeEvent(error=e, charge=None))
+        charge = stripe.Charge.retrieve(e.json_body['error']['charge'])
+        wx.PostEvent(win, CreateChargeEvent(error=e, charge=charge))
     else:
         wx.PostEvent(win, CreateChargeEvent(error=None, charge=charge))
 
@@ -314,7 +316,7 @@ class ChargeList(wx.ListCtrl):
 
     def _fill_row(self, index, charge):
         date = datetime.date.fromtimestamp(charge.created).strftime('%x')
-        amt = '${0:.02f}'.format(charge.amount / 100)
+        amt = '${0:.02f}'.format(charge.amount / 100.0)
         card = '{} ending in {}'.format(
             charge.source.brand, charge.source.last4)
         exp = '{}/{}'.format(charge.source.exp_month, charge.source.exp_year)
@@ -356,13 +358,12 @@ class AddCustomerDialog(wx.Dialog):
         vbox.Add(self.CreateButtonSizer(wx.OK|wx.CANCEL), 0, wx.ALL, 10)
         self.SetSizer(vbox)
 
-        self.Bind(wx.EVT_BUTTON, self.on_add, id=wx.ID_OK)
-        self.Bind(wx.EVT_BUTTON, self.on_cancel, id=wx.ID_CANCEL)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
         self.Bind(EVT_ADD_CUSTOMER, self.on_customer_added)
         self.code_entry.SetFocus()
         self.Fit()
 
-    def on_add(self, e):
+    def on_ok(self, e):
         self.Disable()
         email = self.code_entry.GetValue()
         desc = self.name_entry.GetValue()
@@ -379,9 +380,6 @@ class AddCustomerDialog(wx.Dialog):
         t = threading.Thread(target=add_customer, args=(self, email, desc))
         t.setDaemon(True)
         t.start()
-
-    def on_cancel(self, e):
-        self.Destroy()
 
     def on_customer_added(self, e):
         self.Parent.add_customer(e.customer)
@@ -437,8 +435,8 @@ class AddCardDialog(wx.Dialog):
         
         self.cc_num.Bind(wx.EVT_TEXT, self.on_card_changed)
         self.Bind(EVT_ADD_CARD, self.on_card_added)
-        self.Bind(wx.EVT_BUTTON, self.on_add, id=wx.ID_OK)
-        self.Bind(wx.EVT_BUTTON, self.on_cancel, id=wx.ID_CANCEL)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+        self.cc_num.SetFocus()
         self.Fit()
 
     def on_card_changed(self, e):
@@ -457,7 +455,7 @@ class AddCardDialog(wx.Dialog):
             self.cvc.SetMask(self.default_cvc)
             self.cvc.ChangeValue(cvc[:3])
 
-    def on_add(self, e):
+    def on_ok(self, e):
         self.Disable()
         number = self.cc_num.GetPlainValue()
         month = self.month.GetStringSelection()
@@ -473,9 +471,6 @@ class AddCardDialog(wx.Dialog):
         t.setDaemon(True)
         t.start()
 
-    def on_cancel(self, e):
-        self.Destroy()
-
     def on_card_added(self, e):
         card = e.card
         if card:
@@ -490,38 +485,94 @@ class AddCardDialog(wx.Dialog):
 
 class CreateChargeDialog(wx.Dialog):
     def __init__(self, *args, **kwargs):
-        customer = kwargs.pop('customer')
-        cards = kwargs.pop('cards')
+        self.customer = kwargs.pop('customer')
+        self.cards = kwargs.pop('cards')
         super(CreateChargeDialog, self).__init__(*args, **kwargs)
 
         invoice_label = wx.StaticText(self, label='Invoice Number')
         self.invoice = wx.TextCtrl(self)
         amount_label = wx.StaticText(self, label='Amount')
-        self.amount = masked.TextCtrl(self, mask='$#{6}.#{2}',
-            formatcodes='r,_')
+        self.amount = masked.numctrl.NumCtrl(self)
         card_label = wx.StaticText(self, label='Payment Source')
         self.source = wx.Choice(self)
 
+        self.amount.SetFractionWidth(2)
+        self.amount.SetIntegerWidth(4)
+        self.amount.SetAllowNegative(False)
+
         cs = '{} ending in {} expiring {}/{}'
         cardstrings = [cs.format(c.brand, c.last4, c.exp_month, c.exp_year)
-            for c in cards]
+            for c in self.cards]
         self.source.Set(cardstrings)
 
+        inv_box = wx.BoxSizer(wx.VERTICAL)
+        inv_box.Add(invoice_label, 0, wx.BOTTOM, 10)
+        inv_box.Add(self.invoice)
+
+        amt_box = wx.BoxSizer(wx.VERTICAL)
+        amt_box.Add(amount_label, 0, wx.BOTTOM, 10)
+        amt_box.Add(self.amount)
+
+        inv_amt = wx.BoxSizer(wx.HORIZONTAL)
+        inv_amt.Add(inv_box, 0, wx.RIGHT, 10)
+        inv_amt.Add(amt_box)
+
         vbox = wx.BoxSizer(wx.VERTICAL)
-        vbox.Add(invoice_label, 0, wx.ALL, 10)
-        vbox.Add(self.invoice, 0, wx.EXPAND|wx.LEFT|wx.RIGHT, 10)
-        vbox.Add(amount_label, 0, wx.TOP|wx.LEFT|wx.RIGHT, 10)
-        vbox.Add(self.amount, 0, wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT, 10)
-        vbox.Add(card_label, 0, wx.TOP|wx.LEFT|wx.RIGHT, 10)
-        vbox.Add(self.source, 0, wx.EXPAND|wx.ALL, 10)
+        vbox.Add(inv_amt, 0, wx.ALL, 10)
+        vbox.Add(card_label, 0, wx.LEFT|wx.RIGHT, 10)
+        vbox.Add(self.source, 0, wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT, 10)
+        vbox.Add(self.CreateButtonSizer(wx.OK|wx.CANCEL), 0, wx.ALL, 10)
         self.SetSizer(vbox)
 
+        self.Bind(EVT_CREATE_CHARGE, self.on_charge_created)
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+
+        self.invoice.SetFocus()
         self.Fit()
 
+    def on_ok(self, e):
+        self.Disable()
+        desc = self.invoice.GetValue()
+        amt = int(self.amount.GetPlainValue())
+        card_index = self.source.GetSelection()
+        card = self.cards[card_index]
+        if not desc:
+            wx.MessageBox('Must supply an invoice number.',
+                'Error creating charge', wx.OK|wx.ICON_ERROR)
+            self.Enable()
+            return
+        elif not amt:
+            wx.MessageBox('Must provide an amount to charge.',
+                'Error creating charge', wx.OK|wx.ICON_ERROR)
+            self.Enable()
+            return
+        elif card_index == wx.NOT_FOUND:
+            wx.MessageBox('Must select a payment source.',
+                'Error creating charge', wx.OK|wx.ICON_ERROR)
+            self.Enable()
+            return
+        t = threading.Thread(target=create_charge, args=(
+            self, self.customer, card, amt, desc))
+        t.setDaemon(True)
+        t.start()
+
+    def on_charge_created(self, e):
+        charge = e.charge
+        if not e.error:
+            wx.MessageBox('Card charged successfully.', 'Success',
+                wx.OK|wx.ICON_INFORMATION)
+            self.Parent.add_charge(charge)
+            self.Destroy()
+        else:
+            error = e.error.json_body['error']
+            wx.MessageBox(error['message'],
+                'Error creating charge', wx.OK|wx.ICON_ERROR)
+            self.Parent.add_charge(charge)
+            self.Enable()
 
 
 if __name__ == '__main__':
-    app = wx.App() ### Log output to file ### (True, 'output.log')
+    app = wx.App(True, 'errors.log')
     frame = MainFrame(None, title='Stripe Card Terminal',
         style=wx.DEFAULT_FRAME_STYLE & ~(wx.RESIZE_BORDER | wx.MAXIMIZE_BOX))
     frame.Show()

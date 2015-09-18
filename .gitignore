@@ -1,4 +1,5 @@
 settings.cfg
+errors.log
 *.sublime-project
 *.sublime-workspace
 *.pyc
