@@ -69,7 +69,7 @@ def add_card(win, customer, number, exp_month, exp_year, cvc=None):
         card['cvc'] = int(cvc)
     try:
         card = customer.sources.create(source=card)
-    except stripe.error.CardError, e:
+    except stripe.error.CardError as e:
         wx.PostEvent(win, AddCardEvent(error=e, card=None))
     else:
         wx.PostEvent(win, AddCardEvent(error=None, card=card))
@@ -80,7 +80,7 @@ def create_charge(win, customer, card, amount, description):
         charge = stripe.Charge.create(
             currency='usd', customer=customer.id, source=card.id,
             amount=amount, description=description)
-    except stripe.error.CardError, e:
+    except stripe.error.CardError as e:
         charge = stripe.Charge.retrieve(e.json_body['error']['charge'])
         wx.PostEvent(win, CreateChargeEvent(error=e, charge=charge))
     else:
