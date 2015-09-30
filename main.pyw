@@ -62,11 +62,11 @@ def add_customer(win, email, description):
 def add_card(win, customer, number, exp_month, exp_year, cvc=None):
     card = {
         'object': 'card',
-        'number': int(number),
-        'exp_month': int(exp_month),
-        'exp_year': int(exp_year)}
+        'number': number,
+        'exp_month': exp_month,
+        'exp_year': exp_year}
     if cvc:
-        card['cvc'] = int(cvc)
+        card['cvc'] = cvc
     try:
         card = customer.sources.create(source=card)
     except stripe.error.CardError as e:
