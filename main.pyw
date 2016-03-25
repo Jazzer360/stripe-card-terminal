@@ -16,40 +16,27 @@ AddCardEvent, EVT_ADD_CARD = NewEvent()
 CreateChargeEvent, EVT_CREATE_CHARGE = NewEvent()
 
 
-def fetch_customers(win):
-    customers = []
-    response = stripe.Customer.all()
+def get_paged_stripe_data(stripe_func, **kwargs):
+    results = []
+    response = stripe_func(**kwargs)
     while True:
-        for customer in response.data:
-            customers.append(customer)
+        for item in response.data:
+            results.append(item)
         if not response.has_more:
             break
         lastid = response.data[-1].id
-        response = stripe.Customer.all(starting_after=lastid)
+        response = stripe_func(starting_after=lastid, **kwargs)
+    return results
+
+
+def fetch_customers(win):
+    customers = get_paged_stripe_data(stripe.Customer.all)
     wx.PostEvent(win, CustomersFetchedEvent(customers=customers))
 
 
 def fetch_detail(win, customer):
-    cards = []
-    response = customer.sources.all()
-    while True:
-        for card in response.data:
-            cards.append(card)
-        if not response.has_more:
-            break
-        lastid = response.data[-1].id
-        response = customer.sources.all(starting_after=lastid)
-
-    charges = []
-    response = stripe.Charge.all(customer=customer.id)
-    while True:
-        for charge in response.data:
-            charges.append(charge)
-        if not response.has_more:
-            break
-        lastid = response.data[-1].id
-        response = stripe.Charge.all(
-            customer=customer.id, starting_after=lastid)
+    cards = get_paged_stripe_data(customer.sources.all)
+    charges = get_paged_stripe_data(stripe.Charge.all, customer=customer.id)
     wx.PostEvent(win, CustomerDetailEvent(
         customer=customer, cards=cards, charges=charges))
 
