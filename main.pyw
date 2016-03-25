@@ -17,15 +17,12 @@ CreateChargeEvent, EVT_CREATE_CHARGE = NewEvent()
 
 
 def get_paged_stripe_data(stripe_func, **kwargs):
-    results = []
     response = stripe_func(**kwargs)
-    while True:
-        for item in response.data:
-            results.append(item)
-        if not response.has_more:
-            break
+    results = [item for item in response.data]
+    while response.has_more:
         lastid = response.data[-1].id
         response = stripe_func(starting_after=lastid, **kwargs)
+        results += [item for item in response.data]
     return results
 
 
