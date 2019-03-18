@@ -1,6 +1,6 @@
 import threading
 import datetime
-import ConfigParser
+import configparser
 
 import wx
 from wx.lib.newevent import NewEvent
@@ -84,7 +84,6 @@ class MainFrame(wx.Frame):
         hbox.Add(self.customer_detail, 1, wx.EXPAND)
         self.SetSizer(hbox)
 
-        self.Bind(wx.EVT_CLOSE, self.on_close)
         self.Bind(EVT_CUSTOMERS_FETCHED, self.on_customers_fetched)
         self.Bind(EVT_CUSTOMER_DETAIL, self.on_detail_fetched)
 
@@ -93,12 +92,12 @@ class MainFrame(wx.Frame):
         self.Fit()
 
     def load_config(self):
-        self.config = ConfigParser.SafeConfigParser()
+        self.config = configparser.SafeConfigParser()
         self.config.read('settings.cfg')
         stripe.api_key = self.config.get('Stripe', 'api_key')
         try:
             self.config.add_section('Stripe')
-        except ConfigParser.DuplicateSectionError:
+        except configparser.DuplicateSectionError:
             pass
 
     def load_customers(self):
@@ -109,10 +108,6 @@ class MainFrame(wx.Frame):
         t.setDaemon(True)
         t.start()
 
-    def save_config(self):
-        with open('settings.cfg', 'wb') as configfile:
-            self.config.write(configfile)
-
     def display_customer_detail(self, customer):
         self.customer_list.Disable()
         self.customer_detail.Disable()
@@ -120,10 +115,6 @@ class MainFrame(wx.Frame):
         t.setDaemon(True)
         t.start()
         return
-
-    def on_close(self, e):
-        self.save_config()
-        e.Skip()
 
     def on_customers_fetched(self, e):
         self.customer_list.set_customers(e.customers)
@@ -301,8 +292,8 @@ class CardList(wx.ListCtrl):
     def _fill_row(self, index, card):
         cardstr = '{} ending in {}'.format(card.brand, card.last4)
         exp = '{}/{}'.format(card.exp_month, card.exp_year)
-        self.InsertStringItem(index, cardstr)
-        self.SetStringItem(index, 1, exp)
+        self.InsertItem(index, cardstr)
+        self.SetItem(index, 1, exp)
 
     def set_cards(self, cards):
         self.cards = cards or []
@@ -342,11 +333,11 @@ class ChargeList(wx.ListCtrl):
             charge.source.brand, charge.source.last4)
         exp = '{}/{}'.format(charge.source.exp_month, charge.source.exp_year)
         status = 'Success' if charge.status == 'succeeded' else 'Failed'
-        self.InsertStringItem(index, date)
-        self.SetStringItem(index, 1, amt)
-        self.SetStringItem(index, 2, card)
-        self.SetStringItem(index, 3, exp)
-        self.SetStringItem(index, 4, status)
+        self.InsertItem(index, date)
+        self.SetItem(index, 1, amt)
+        self.SetItem(index, 2, card)
+        self.SetItem(index, 3, exp)
+        self.SetItem(index, 4, status)
 
     def set_charges(self, charges):
         self.charges = charges or []
