@@ -3,3 +3,4 @@ errors.log
 *.sublime-project
 *.sublime-workspace
 *.pyc
+/venv
