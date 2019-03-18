@@ -158,7 +158,8 @@ class CustomerList(wx.Panel):
         self.SetSizer(vbox)
 
         self.listbox.Bind(wx.EVT_LISTBOX, self.on_selection)
-        self.findbox.Bind(wx.EVT_TEXT_ENTER, self.on_filter)
+        self.findbox.Bind(wx.EVT_TEXT, self.on_filter)
+        self.findbox.Bind(wx.EVT_TEXT_ENTER, self.on_filter_enter)
         add_button.Bind(wx.EVT_BUTTON, self.on_add)
         reload_button.Bind(wx.EVT_BUTTON, self.on_refresh)
 
@@ -188,6 +189,14 @@ class CustomerList(wx.Panel):
                 return
 
     def on_filter(self, e):
+        txt = self.findbox.GetValue().upper()
+        if txt:
+            self.listbox.Set(
+                [c.email for c in self.customers if txt in c.email])
+        else:
+            self.listbox.Set([c.email for c in self.customers])
+
+    def on_filter_enter(self, e):
         idx = self.listbox.FindString(self.findbox.GetValue())
         if idx is wx.NOT_FOUND:
             code = self.findbox.GetValue().upper()
