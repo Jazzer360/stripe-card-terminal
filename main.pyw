@@ -27,14 +27,14 @@ def get_paged_stripe_data(stripe_func, **kwargs):
 
 
 def fetch_customers(win):
-    customers = get_paged_stripe_data(stripe.Customer.all, limit=100)
+    customers = get_paged_stripe_data(stripe.Customer.list, limit=100)
     wx.PostEvent(win, CustomersFetchedEvent(customers=customers))
 
 
 def fetch_detail(win, customer):
-    cards = get_paged_stripe_data(customer.sources.all, limit=100)
+    cards = get_paged_stripe_data(customer.sources.list, limit=100)
     charges = get_paged_stripe_data(
-        stripe.Charge.all, limit=100, customer=customer.id)
+        stripe.Charge.list, limit=100, customer=customer.id)
     wx.PostEvent(win, CustomerDetailEvent(
         customer=customer, cards=cards, charges=charges))
 
