@@ -141,12 +141,16 @@ class CustomerList(wx.Panel):
     def __init__(self, *args, **kwargs):
         super(CustomerList, self).__init__(*args, **kwargs)
 
+        find = wx.StaticText(self, label='Find')
+        self.findbox = wx.TextCtrl(self, style=wx.TE_PROCESS_ENTER)
         label = wx.StaticText(self, label='Customers')
         self.listbox = wx.ListBox(self, style=wx.LB_SINGLE | wx.LB_SORT)
         add_button = wx.Button(self, label='Add Customer')
         reload_button = wx.Button(self, label='Reload')
 
         vbox = wx.BoxSizer(wx.VERTICAL)
+        vbox.Add(find, 0, wx.ALIGN_CENTER | wx.ALL, 10)
+        vbox.Add(self.findbox, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
         vbox.Add(label, 0, wx.ALIGN_CENTER | wx.ALL, 10)
         vbox.Add(self.listbox, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
         vbox.Add(add_button, 0, wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 10)
@@ -154,6 +158,7 @@ class CustomerList(wx.Panel):
         self.SetSizer(vbox)
 
         self.listbox.Bind(wx.EVT_LISTBOX, self.on_selection)
+        self.findbox.Bind(wx.EVT_TEXT_ENTER, self.on_filter)
         add_button.Bind(wx.EVT_BUTTON, self.on_add)
         reload_button.Bind(wx.EVT_BUTTON, self.on_refresh)
 
@@ -181,6 +186,19 @@ class CustomerList(wx.Panel):
             if selection == customer.email:
                 self.Parent.display_customer_detail(customer)
                 return
+
+    def on_filter(self, e):
+        idx = self.listbox.FindString(self.findbox.GetValue())
+        if idx is wx.NOT_FOUND:
+            code = self.findbox.GetValue().upper()
+            dialog = AddCustomerDialog(self, title='Add Customer')
+            dialog.code_entry.SetValue(code)
+            dialog.name_entry.SetFocus()
+            dialog.ShowModal()
+            dialog.Destroy()
+        else:
+            self.listbox.SetSelection(idx)
+            self.on_selection(None)
 
 
 class CustomerDetail(wx.Panel):
