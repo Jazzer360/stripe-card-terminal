@@ -87,9 +87,9 @@ class MainFrame(wx.Frame):
         self.Bind(EVT_CUSTOMERS_FETCHED, self.on_customers_fetched)
         self.Bind(EVT_CUSTOMER_DETAIL, self.on_detail_fetched)
 
+        self.Fit()
         self.load_config()
         self.load_customers()
-        self.Fit()
 
     def load_config(self):
         self.config = configparser.SafeConfigParser()
@@ -101,6 +101,8 @@ class MainFrame(wx.Frame):
             pass
 
     def load_customers(self):
+        wx.BeginBusyCursor()
+        self.busywin = wx.BusyInfo('Loading customer data...', self)
         self.customer_list.Disable()
         self.customer_detail.Disable()
         self.customer_detail.set_detail(None, None, None)
@@ -119,6 +121,8 @@ class MainFrame(wx.Frame):
     def on_customers_fetched(self, e):
         self.customer_list.set_customers(e.customers)
         self.customer_list.Enable()
+        wx.EndBusyCursor()
+        del self.busywin
         self.Layout()
 
     def on_detail_fetched(self, e):
@@ -191,9 +195,7 @@ class CustomerList(wx.Panel):
         idx = self.listbox.FindString(self.findbox.GetValue())
         if idx is wx.NOT_FOUND:
             code = self.findbox.GetValue().upper()
-            dialog = AddCustomerDialog(self, title='Add Customer')
-            dialog.code_entry.SetValue(code)
-            dialog.name_entry.SetFocus()
+            dialog = AddCustomerDialog(self, title='Add Customer', code=code)
             dialog.ShowModal()
             dialog.Destroy()
         else:
@@ -284,6 +286,12 @@ class CardList(wx.ListCtrl):
         self.InsertColumn(0, 'Card Info')
         self.InsertColumn(1, 'Expiration')
         self.cards = []
+        self.imgs = wx.ImageList(32, 20)
+        self.imgs.Add(wx.Bitmap('assets/visa.png'))
+        self.imgs.Add(wx.Bitmap('assets/mc.png'))
+        self.imgs.Add(wx.Bitmap('assets/disc.png'))
+        self.imgs.Add(wx.Bitmap('assets/amex.png'))
+        self.SetImageList(self.imgs, wx.IMAGE_LIST_SMALL)
 
     def _resize_cols(self):
         self.SetColumnWidth(0, wx.LIST_AUTOSIZE_USEHEADER)
@@ -292,7 +300,8 @@ class CardList(wx.ListCtrl):
     def _fill_row(self, index, card):
         cardstr = '{} ending in {}'.format(card.brand, card.last4)
         exp = '{}/{}'.format(card.exp_month, card.exp_year)
-        self.InsertItem(index, cardstr)
+        cards = ['Visa', 'MasterCard', 'Discover', 'American Express']
+        self.InsertItem(index, cardstr, cards.index(card.brand))
         self.SetItem(index, 1, exp)
 
     def set_cards(self, cards):
@@ -355,6 +364,7 @@ class ChargeList(wx.ListCtrl):
 
 class AddCustomerDialog(wx.Dialog):
     def __init__(self, *args, **kwargs):
+        passed = kwargs.pop('code', None)
         super(AddCustomerDialog, self).__init__(*args, **kwargs)
 
         code = wx.StaticText(self, label='Customer Code')
@@ -373,7 +383,11 @@ class AddCustomerDialog(wx.Dialog):
 
         self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
         self.Bind(EVT_ADD_CUSTOMER, self.on_customer_added)
-        self.code_entry.SetFocus()
+        if passed:
+            self.code_entry.SetValue(passed)
+            self.name_entry.SetFocus()
+        else:
+            self.code_entry.SetFocus()
         self.Fit()
 
     def on_ok(self, e):
