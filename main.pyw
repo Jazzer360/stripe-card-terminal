@@ -15,6 +15,10 @@ AddCustomerEvent, EVT_ADD_CUSTOMER = NewEvent()
 AddCardEvent, EVT_ADD_CARD = NewEvent()
 CreateChargeEvent, EVT_CREATE_CHARGE = NewEvent()
 
+GREEN = [209, 255, 209]
+YELLOW = [255, 255, 209]
+RED = [255, 209, 209]
+
 
 def get_paged_stripe_data(stripe_func, **kwargs):
     response = stripe_func(**kwargs)
@@ -39,8 +43,9 @@ def fetch_detail(win, customer):
         customer=customer, cards=cards, charges=charges))
 
 
-def add_customer(win, email, description):
-    customer = stripe.Customer.create(email=email, description=description)
+def add_customer(win, code, description):
+    customer = stripe.Customer.create(metadata={'Code': code},
+                                      description=description)
     wx.PostEvent(win, AddCustomerEvent(customer=customer))
 
 
@@ -87,7 +92,7 @@ class MainFrame(wx.Frame):
         self.Bind(EVT_CUSTOMERS_FETCHED, self.on_customers_fetched)
         self.Bind(EVT_CUSTOMER_DETAIL, self.on_detail_fetched)
 
-        self.Fit()
+        self.SetSize(650, 650)
         self.load_config()
         self.load_customers()
 
@@ -160,12 +165,12 @@ class CustomerList(wx.Panel):
 
     def set_customers(self, customers):
         self.customers = customers
-        self.listbox.Set([c.email for c in self.customers])
+        self.listbox.Set([c.metadata['Code'] for c in self.customers])
 
     def add_customer(self, customer):
         self.customers.append(customer)
-        self.listbox.Set([c.email for c in self.customers])
-        self.listbox.SetStringSelection(customer.email)
+        self.listbox.Set([c.metadata['Code'] for c in self.customers])
+        self.listbox.SetStringSelection(customer.metadata['Code'])
         self.on_selection(None)
 
     def on_add(self, e):
@@ -179,7 +184,7 @@ class CustomerList(wx.Panel):
     def on_selection(self, e):
         selection = self.listbox.GetStringSelection()
         for customer in self.customers:
-            if selection == customer.email:
+            if selection == customer.metadata['Code']:
                 self.Parent.display_customer_detail(customer)
                 return
 
@@ -187,9 +192,10 @@ class CustomerList(wx.Panel):
         txt = self.findbox.GetValue().upper()
         if txt:
             self.listbox.Set(
-                [c.email for c in self.customers if txt in c.email])
+                [c.metadata['Code'] for c in self.customers
+                    if txt in c.metadata['Code']])
         else:
-            self.listbox.Set([c.email for c in self.customers])
+            self.listbox.Set([c.metadata['Code'] for c in self.customers])
 
     def on_filter_enter(self, e):
         idx = self.listbox.FindString(self.findbox.GetValue())
@@ -235,10 +241,10 @@ class CustomerDetail(wx.Panel):
         vbox.Add(self.name, 0, wx.ALIGN_CENTER | wx.LEFT | wx.RIGHT, 10)
         vbox.Add(card_header, 0, wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 10)
         vbox.Add(
-            self.cards_list, 1, wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 10)
+            self.cards_list, 2, wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 10)
         vbox.Add(
             charges_header, 0, wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 10)
-        vbox.Add(self.charge_list, 1, wx.EXPAND | wx.ALL, 10)
+        vbox.Add(self.charge_list, 3, wx.EXPAND | wx.ALL, 10)
         self.SetSizer(vbox)
 
         create_charge.Bind(wx.EVT_BUTTON, self.on_create_charge)
@@ -248,7 +254,7 @@ class CustomerDetail(wx.Panel):
     def set_detail(self, customer, cards, charges):
         self.customer = customer
         if customer:
-            self.code.SetLabel(customer.email)
+            self.code.SetLabel(customer.metadata['Code'])
             self.name.SetLabel(customer.description)
         else:
             self.code.SetLabel('')
@@ -273,16 +279,20 @@ class CustomerDetail(wx.Panel):
                 'Customer has no cards to charge.',
                 'Error creating charge', wx.OK | wx.ICON_ERROR)
             return
+        card = self.cards_list.GetFirstSelected()
+        if card == -1:
+            card = None
         dialog = CreateChargeDialog(
             self, title='Charge Credit Card', customer=self.customer,
-            cards=self.cards_list.cards)
+            cards=self.cards_list.cards, card_index=card)
         dialog.ShowModal()
         dialog.Destroy()
 
 
 class CardList(wx.ListCtrl):
     def __init__(self, *args, **kwargs):
-        super(CardList, self).__init__(style=wx.LC_REPORT, *args, **kwargs)
+        super(CardList, self).__init__(style=wx.LC_SINGLE_SEL | wx.LC_REPORT,
+                                       *args, **kwargs)
         self.InsertColumn(0, 'Card Info')
         self.InsertColumn(1, 'Expiration')
         self.cards = []
@@ -297,7 +307,9 @@ class CardList(wx.ListCtrl):
         self.SetColumnWidth(0, wx.LIST_AUTOSIZE_USEHEADER)
         self.SetColumnWidth(1, wx.LIST_AUTOSIZE_USEHEADER)
 
-    def _fill_row(self, index, card):
+    def _fill_row(self, card, index=None):
+        if index is None:
+            index = self.GetItemCount()
         cardstr = '{} ending in {}'.format(card.brand, card.last4)
         exp = '{}/{}'.format(card.exp_month, card.exp_year)
         cards = ['Visa', 'MasterCard', 'Discover', 'American Express']
@@ -305,22 +317,33 @@ class CardList(wx.ListCtrl):
         self.SetItem(index, 1, exp)
 
     def set_cards(self, cards):
-        self.cards = cards or []
         self.DeleteAllItems()
+        self.cards = None
         if cards:
-            for index, card in enumerate(cards):
-                self._fill_row(index, card)
+            now = datetime.date.today()
+
+            def expired(card):
+                if card.exp_year < now.year:
+                    return True
+                if card.exp_year == now.year and card.exp_month < now.month:
+                    return True
+                else:
+                    return False
+            self.cards = [card for card in cards if not expired(card)]
+            for card in self.cards:
+                self._fill_row(card)
             self._resize_cols()
 
     def add_card(self, card):
         self.cards.insert(0, card)
-        self._fill_row(0, card)
+        self._fill_row(card, 0)
         self._resize_cols()
 
 
 class ChargeList(wx.ListCtrl):
     def __init__(self, *args, **kwargs):
-        super(ChargeList, self).__init__(style=wx.LC_REPORT, *args, **kwargs)
+        super(ChargeList, self).__init__(style=wx.LC_REPORT | wx.LC_SINGLE_SEL,
+                                         *args, **kwargs)
         self.InsertColumn(0, 'Date')
         self.InsertColumn(1, 'Amount')
         self.InsertColumn(2, 'Card Info')
@@ -335,30 +358,49 @@ class ChargeList(wx.ListCtrl):
         self.SetColumnWidth(3, wx.LIST_AUTOSIZE_USEHEADER)
         self.SetColumnWidth(4, wx.LIST_AUTOSIZE_USEHEADER)
 
-    def _fill_row(self, index, charge):
+    def _fill_row(self, charge, index=None):
+        if index is None:
+            index = self.GetItemCount()
         date = datetime.date.fromtimestamp(charge.created).strftime('%x')
         amt = '${0:.02f}'.format(charge.amount / 100.0)
         card = '{} ending in {}'.format(
             charge.source.brand, charge.source.last4)
         exp = '{}/{}'.format(charge.source.exp_month, charge.source.exp_year)
-        status = 'Success' if charge.status == 'succeeded' else 'Failed'
+        color = wx.Colour(*GREEN)
+        if charge.refunded:
+            status = 'Refunded'
+        elif charge.amount_refunded:
+            status = 'Partial Refund'
+        elif charge.status == 'succeeded':
+            status = 'Success'
+        elif charge.status == 'pending':
+            status = 'Pending'
+            color = wx.Colour(*YELLOW)
+        else:
+            status = 'Failed'
+            color = wx.Colour(*RED)
         self.InsertItem(index, date)
         self.SetItem(index, 1, amt)
         self.SetItem(index, 2, card)
         self.SetItem(index, 3, exp)
         self.SetItem(index, 4, status)
+        self.SetItemBackgroundColour(index, color)
+        for refund in charge.refunds:
+            index = index + 1
+            date = datetime.date.fromtimestamp(refund.created).strftime('%x')
+            amt = '${0:.02f}'.format(refund.amount / 100.0)
 
     def set_charges(self, charges):
         self.charges = charges or []
         self.DeleteAllItems()
         if charges:
-            for index, charge in enumerate(charges):
-                self._fill_row(index, charge)
+            for charge in charges:
+                self._fill_row(charge)
             self._resize_cols()
 
     def add_charge(self, charge):
         self.charges.insert(0, charge)
-        self._fill_row(0, charge)
+        self._fill_row(charge, 0)
         self._resize_cols()
 
 
@@ -392,21 +434,21 @@ class AddCustomerDialog(wx.Dialog):
 
     def on_ok(self, e):
         self.Disable()
-        email = self.code_entry.GetValue()
+        code = self.code_entry.GetValue()
         desc = self.name_entry.GetValue()
-        if not (email and desc):
+        if not (code and desc):
             wx.MessageBox(
                 'Must supply customer code and customer name.',
                 'Error adding customer', wx.OK | wx.ICON_ERROR)
             self.Enable()
             return
-        elif email in (c.email for c in self.Parent.customers):
+        elif code in (c.metadata['Code'] for c in self.Parent.customers):
             wx.MessageBox(
                 'Customer already exists.',
                 'Error adding customer', wx.OK | wx.ICON_ERROR)
             self.Enable()
             return
-        t = threading.Thread(target=add_customer, args=(self, email, desc))
+        t = threading.Thread(target=add_customer, args=(self, code, desc))
         t.setDaemon(True)
         t.start()
 
@@ -517,6 +559,9 @@ class CreateChargeDialog(wx.Dialog):
     def __init__(self, *args, **kwargs):
         self.customer = kwargs.pop('customer')
         self.cards = kwargs.pop('cards')
+        self.card_index = kwargs.pop('card_index')
+        if self.card_index is None:
+            self.card_index = wx.NOT_FOUND
         super(CreateChargeDialog, self).__init__(*args, **kwargs)
 
         invoice_label = wx.StaticText(self, label='Invoice Number')
@@ -534,6 +579,7 @@ class CreateChargeDialog(wx.Dialog):
         cardstrings = [cs.format(c.brand, c.last4, c.exp_month, c.exp_year)
                        for c in self.cards]
         self.source.Set(cardstrings)
+        self.source.SetSelection(self.card_index)
 
         inv_box = wx.BoxSizer(wx.VERTICAL)
         inv_box.Add(invoice_label, 0, wx.BOTTOM, 10)
