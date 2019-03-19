@@ -388,7 +388,19 @@ class ChargeList(wx.ListCtrl):
         for refund in charge.refunds:
             index = index + 1
             date = datetime.date.fromtimestamp(refund.created).strftime('%x')
-            amt = '${0:.02f}'.format(refund.amount / 100.0)
+            amt = '$({0:.02f})'.format(refund.amount / 100.0)
+            if refund.status == 'succeeded':
+                status = 'Refund'
+                color = wx.Colour(*GREEN)
+            else:
+                status = 'Refund Failed'
+                color = wx.Colour(*RED)
+            self.InsertItem(index, date)
+            self.SetItem(index, 1, amt)
+            self.SetItem(index, 2, '-')
+            self.SetItem(index, 3, '-')
+            self.SetItem(index, 4, status)
+            self.SetItemBackgroundColour(index, color)
 
     def set_charges(self, charges):
         self.charges = charges or []
