@@ -18,6 +18,8 @@ CreateChargeEvent, EVT_CREATE_CHARGE = NewEvent()
 GREEN = [209, 255, 209]
 YELLOW = [255, 255, 209]
 RED = [255, 209, 209]
+BLUE = [209, 209, 255]
+PURPLE = [255, 209, 255]
 
 
 def get_paged_stripe_data(stripe_func, **kwargs):
@@ -83,6 +85,7 @@ class MainFrame(wx.Frame):
 
         self.customer_list = CustomerList(self)
         self.customer_detail = CustomerDetail(self)
+        self.status = self.CreateStatusBar(1)
 
         hbox = wx.BoxSizer(wx.HORIZONTAL)
         hbox.Add(self.customer_list, 0, wx.EXPAND)
@@ -107,6 +110,7 @@ class MainFrame(wx.Frame):
 
     def load_customers(self):
         wx.BeginBusyCursor()
+        self.status.SetStatusText('Loading customers...')
         self.busywin = wx.BusyInfo('Loading customer data...', self)
         self.customer_list.Disable()
         self.customer_detail.Disable()
@@ -128,6 +132,7 @@ class MainFrame(wx.Frame):
         self.customer_list.Enable()
         wx.EndBusyCursor()
         del self.busywin
+        self.status.SetStatusText('{} customers'.format(len(e.customers)))
         self.Layout()
 
     def on_detail_fetched(self, e):
@@ -142,15 +147,21 @@ class CustomerList(wx.Panel):
         super(CustomerList, self).__init__(*args, **kwargs)
 
         find = wx.StaticText(self, label='Find')
+        clearfind = wx.Button(self, label='x', style=wx.BU_EXACTFIT)
         self.findbox = wx.TextCtrl(self, style=wx.TE_PROCESS_ENTER)
+        self.findbox.SetMinSize((85, -1))
         label = wx.StaticText(self, label='Customers')
         self.listbox = wx.ListBox(self, style=wx.LB_SINGLE | wx.LB_SORT)
         add_button = wx.Button(self, label='Add Customer')
         reload_button = wx.Button(self, label='Reload')
 
+        hbox = wx.BoxSizer(wx.HORIZONTAL)
+        hbox.Add(self.findbox, 1, wx.EXPAND)
+        hbox.Add(clearfind)
+
         vbox = wx.BoxSizer(wx.VERTICAL)
         vbox.Add(find, 0, wx.ALIGN_CENTER | wx.ALL, 10)
-        vbox.Add(self.findbox, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
+        vbox.Add(hbox, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
         vbox.Add(label, 0, wx.ALIGN_CENTER | wx.ALL, 10)
         vbox.Add(self.listbox, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
         vbox.Add(add_button, 0, wx.EXPAND | wx.TOP | wx.LEFT | wx.RIGHT, 10)
@@ -162,6 +173,7 @@ class CustomerList(wx.Panel):
         self.findbox.Bind(wx.EVT_TEXT_ENTER, self.on_filter_enter)
         add_button.Bind(wx.EVT_BUTTON, self.on_add)
         reload_button.Bind(wx.EVT_BUTTON, self.on_refresh)
+        clearfind.Bind(wx.EVT_BUTTON, self.on_clear_find)
 
     def set_customers(self, customers):
         self.customers = customers
@@ -180,6 +192,9 @@ class CustomerList(wx.Panel):
 
     def on_refresh(self, e):
         self.Parent.load_customers()
+
+    def on_clear_find(self, e):
+        self.findbox.SetValue('')
 
     def on_selection(self, e):
         selection = self.listbox.GetStringSelection()
@@ -254,8 +269,8 @@ class CustomerDetail(wx.Panel):
     def set_detail(self, customer, cards, charges):
         self.customer = customer
         if customer:
-            self.code.SetLabel(customer.metadata['Code'])
-            self.name.SetLabel(customer.description)
+            self.code.SetLabel(customer.metadata['Code'].replace('&', '&&'))
+            self.name.SetLabel(customer.description.replace('&', '&&'))
         else:
             self.code.SetLabel('')
             self.name.SetLabel('')
@@ -388,13 +403,13 @@ class ChargeList(wx.ListCtrl):
         for refund in charge.refunds:
             index = index + 1
             date = datetime.date.fromtimestamp(refund.created).strftime('%x')
-            amt = '$({0:.02f})'.format(refund.amount / 100.0)
+            amt = '(${0:.02f})'.format(refund.amount / 100.0)
             if refund.status == 'succeeded':
                 status = 'Refund'
-                color = wx.Colour(*GREEN)
+                color = wx.Colour(*BLUE)
             else:
                 status = 'Refund Failed'
-                color = wx.Colour(*RED)
+                color = wx.Colour(*PURPLE)
             self.InsertItem(index, date)
             self.SetItem(index, 1, amt)
             self.SetItem(index, 2, '-')
