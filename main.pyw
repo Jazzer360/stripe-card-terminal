@@ -14,6 +14,7 @@ CustomerDetailEvent, EVT_CUSTOMER_DETAIL = NewEvent()
 AddCustomerEvent, EVT_ADD_CUSTOMER = NewEvent()
 AddCardEvent, EVT_ADD_CARD = NewEvent()
 CreateChargeEvent, EVT_CREATE_CHARGE = NewEvent()
+CreateRefundEvent, EVT_CREATE_REFUND = NewEvent()
 
 GREEN = [209, 255, 209]
 YELLOW = [255, 255, 209]
@@ -77,6 +78,17 @@ def create_charge(win, customer, card, amount, description):
         wx.PostEvent(win, CreateChargeEvent(error=e, charge=charge))
     else:
         wx.PostEvent(win, CreateChargeEvent(error=None, charge=charge))
+
+
+def create_refund(win, charge, amount):
+    try:
+        refund = stripe.Refund.create(
+            charge=charge.id, amount=amount)
+    except (stripe.error.CardError, stripe.error.InvalidRequestError) as e:
+        wx.PostEvent(win, CreateRefundEvent(error=e, refund=None))
+    else:
+        wx.PostEvent(win, CreateRefundEvent(error=None, refund=refund,
+                                            charge=charge))
 
 
 class MainFrame(wx.Frame):
@@ -234,6 +246,7 @@ class CustomerDetail(wx.Panel):
         add_card = wx.Button(self, label='Add Card')
         self.cards_list = CardList(self)
         charges = wx.StaticText(self, label='Charges')
+        create_refund = wx.Button(self, label='Issue Refund')
         create_charge = wx.Button(self, label='Create Charge')
         self.charge_list = ChargeList(self)
 
@@ -249,6 +262,7 @@ class CustomerDetail(wx.Panel):
         charges_header = wx.BoxSizer(wx.HORIZONTAL)
         charges_header.Add(charges, flag=wx.ALIGN_BOTTOM)
         charges_header.AddStretchSpacer(1)
+        charges_header.Add(create_refund)
         charges_header.Add(create_charge)
 
         vbox = wx.BoxSizer(wx.VERTICAL)
@@ -264,6 +278,7 @@ class CustomerDetail(wx.Panel):
 
         create_charge.Bind(wx.EVT_BUTTON, self.on_create_charge)
         add_card.Bind(wx.EVT_BUTTON, self.on_add_card)
+        create_refund.Bind(wx.EVT_BUTTON, self.on_create_refund)
         self.Disable()
 
     def set_detail(self, customer, cards, charges):
@@ -300,6 +315,46 @@ class CustomerDetail(wx.Panel):
         dialog = CreateChargeDialog(
             self, title='Charge Credit Card', customer=self.customer,
             cards=self.cards_list.cards, card_index=card)
+        dialog.ShowModal()
+        dialog.Destroy()
+
+    def add_refund(self, refund, charge):
+        charges = self.charge_list.charges
+        index = charges.index(charge)
+        tot_ref = charges[index].amount_refunded
+        tot_ref = tot_ref + refund.amount
+        charges[index].amount_refunded = tot_ref
+        if tot_ref == charge.amount:
+            charges[index].refunded = True
+        charges[index].refunds.data.insert(0, refund)
+        self.charge_list.set_charges(charges)
+
+    def on_create_refund(self, e):
+        sel = self.charge_list.GetFirstSelected()
+        if sel == -1:
+            wx.MessageBox(
+                'You must select a charge to refund.',
+                'Error creating refund', wx.OK | wx.ICON_ERROR)
+            return
+        charge = self.charge_list.GetItemData(sel)
+        if charge == -1:
+            wx.MessageBox(
+                'You can not refund a refund.',
+                'Error creating refund', wx.OK | wx.ICON_ERROR)
+            return
+        charge = self.charge_list.charges[charge]
+        if charge.status == 'failed':
+            wx.MessageBox(
+                'You can not refund a failed charge.',
+                'Error creating refund', wx.OK | wx.ICON_ERROR)
+            return
+        if charge.refunded:
+            wx.MessageBox(
+                'Charge has already been refunded.',
+                'Error creating refund', wx.OK | wx.ICON_ERROR)
+            return
+        dialog = CreateRefundDialog(
+            self, title='Refund Credit Card', charge=charge)
         dialog.ShowModal()
         dialog.Destroy()
 
@@ -400,6 +455,7 @@ class ChargeList(wx.ListCtrl):
         self.SetItem(index, 3, exp)
         self.SetItem(index, 4, status)
         self.SetItemBackgroundColour(index, color)
+        self.SetItemData(index, self.charges.index(charge))
         for refund in charge.refunds:
             index = index + 1
             date = datetime.date.fromtimestamp(refund.created).strftime('%x')
@@ -416,6 +472,7 @@ class ChargeList(wx.ListCtrl):
             self.SetItem(index, 3, '-')
             self.SetItem(index, 4, status)
             self.SetItemBackgroundColour(index, color)
+            self.SetItemData(index, -1)
 
     def set_charges(self, charges):
         self.charges = charges or []
@@ -427,7 +484,7 @@ class ChargeList(wx.ListCtrl):
 
     def add_charge(self, charge):
         self.charges.insert(0, charge)
-        self._fill_row(charge, 0)
+        self.set_charges(self.charges)
         self._resize_cols()
 
 
@@ -678,6 +735,58 @@ class CreateChargeDialog(wx.Dialog):
             self.Parent.add_charge(charge)
             self.Enable()
 
+
+class CreateRefundDialog(wx.Dialog):
+    def __init__(self, *args, **kwargs):
+        self.charge = kwargs.pop('charge')
+        super(CreateRefundDialog, self).__init__(*args, **kwargs)
+
+        amount_label = wx.StaticText(self, label='Amount')
+        self.amount = masked.numctrl.NumCtrl(self)
+        self.amount.SetFractionWidth(2)
+        self.amount.SetIntegerWidth(4)
+        self.amount.SetAllowNegative(False)
+
+        vbox = wx.BoxSizer(wx.VERTICAL)
+        vbox.Add(amount_label, 0, wx.ALL, 10)
+        vbox.Add(self.amount, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
+        vbox.Add(self.CreateButtonSizer(wx.OK | wx.CANCEL), 0, wx.ALL, 10)
+        self.SetSizer(vbox)
+        self.Fit()
+
+        self.Bind(wx.EVT_BUTTON, self.on_ok, id=wx.ID_OK)
+        self.Bind(EVT_CREATE_REFUND, self.on_refund_created)
+
+        self.amount.SetFocus()
+
+    def on_ok(self, e):
+        self.Disable()
+        amt = int(self.amount.GetPlainValue())
+        if not amt:
+            wx.MessageBox(
+                'Must provide an amount to refund.',
+                'Error issuing refund', wx.OK | wx.ICON_ERROR)
+            self.Enable()
+            return
+        t = threading.Thread(target=create_refund, args=(
+            self, self.charge, amt))
+        t.setDaemon(True)
+        t.start()
+
+    def on_refund_created(self, e):
+        refund = e.refund
+        if not e.error:
+            wx.MessageBox(
+                'Card refunded successfully.', 'Success',
+                wx.OK | wx.ICON_INFORMATION)
+            self.Parent.add_refund(refund, e.charge)
+            self.Destroy()
+        else:
+            error = e.error.json_body['error']
+            wx.MessageBox(
+                error['message'],
+                'Error issuing refund', wx.OK | wx.ICON_ERROR)
+            self.Enable()
 
 if __name__ == '__main__':
     app = wx.App(True, 'errors.log')
