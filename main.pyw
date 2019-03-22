@@ -321,10 +321,8 @@ class CustomerDetail(wx.Panel):
     def add_refund(self, refund, charge):
         charges = self.charge_list.charges
         index = charges.index(charge)
-        tot_ref = charges[index].amount_refunded
-        tot_ref = tot_ref + refund.amount
-        charges[index].amount_refunded = tot_ref
-        if tot_ref == charge.amount:
+        charges[index].amount_refunded += refund.amount
+        if charges[index].amount_refunded == charge.amount:
             charges[index].refunded = True
         charges[index].refunds.data.insert(0, refund)
         self.charge_list.set_charges(charges)
