@@ -477,12 +477,11 @@ class ChargeList(wx.ListCtrl):
         if charges:
             for charge in charges:
                 self._fill_row(charge)
-            self._resize_cols()
+        self._resize_cols()
 
     def add_charge(self, charge):
         self.charges.insert(0, charge)
         self.set_charges(self.charges)
-        self._resize_cols()
 
 
 class AddCustomerDialog(wx.Dialog):
