@@ -112,7 +112,7 @@ class MainFrame(wx.Frame):
         self.load_customers()
 
     def load_config(self):
-        self.config = configparser.SafeConfigParser()
+        self.config = configparser.ConfigParser()
         self.config.read('settings.cfg')
         stripe.api_key = self.config.get('Stripe', 'api_key')
         try:
@@ -386,7 +386,7 @@ class CardList(wx.ListCtrl):
 
     def set_cards(self, cards):
         self.DeleteAllItems()
-        self.cards = None
+        self.cards = []
         if cards:
             now = datetime.date.today()
 
