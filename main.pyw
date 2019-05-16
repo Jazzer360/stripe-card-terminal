@@ -144,7 +144,7 @@ class MainFrame(wx.Frame):
         self.customer_list.Enable()
         wx.EndBusyCursor()
         del self.busywin
-        self.status.SetStatusText('{} customers'.format(len(e.customers)))
+        self.status.SetStatusText(f'{len(e.customers)} customers')
         self.Layout()
 
     def on_detail_fetched(self, e):
@@ -378,8 +378,8 @@ class CardList(wx.ListCtrl):
     def _fill_row(self, card, index=None):
         if index is None:
             index = self.GetItemCount()
-        cardstr = '{} ending in {}'.format(card.brand, card.last4)
-        exp = '{}/{}'.format(card.exp_month, card.exp_year)
+        cardstr = f'{card.brand} ending in {card.last4}'
+        exp = f'{card.exp_month}/{card.exp_year}'
         cards = ['Visa', 'MasterCard', 'Discover', 'American Express']
         self.InsertItem(index, cardstr, cards.index(card.brand))
         self.SetItem(index, 1, exp)
@@ -430,10 +430,9 @@ class ChargeList(wx.ListCtrl):
         if index is None:
             index = self.GetItemCount()
         date = datetime.date.fromtimestamp(charge.created).strftime('%x')
-        amt = '${0:.02f}'.format(charge.amount / 100.0)
-        card = '{} ending in {}'.format(
-            charge.source.brand, charge.source.last4)
-        exp = '{}/{}'.format(charge.source.exp_month, charge.source.exp_year)
+        amt = f'${charge.amount / 100.0:.02f}'
+        card = f'{charge.source.brand} ending in {charge.source.last4}'
+        exp = f'{charge.source.exp_month}/{charge.source.exp_year}'
         color = wx.Colour(*GREEN)
         if charge.refunded:
             status = 'Refunded'
@@ -457,7 +456,7 @@ class ChargeList(wx.ListCtrl):
         for refund in charge.refunds:
             index = index + 1
             date = datetime.date.fromtimestamp(refund.created).strftime('%x')
-            amt = '(${0:.02f})'.format(refund.amount / 100.0)
+            amt = f'(${refund.amount / 100.0:.02f})'
             if refund.status == 'succeeded':
                 status = 'Refund'
                 color = wx.Colour(*BLUE)
