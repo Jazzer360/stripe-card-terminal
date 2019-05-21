@@ -634,7 +634,19 @@ class AddCardDialog(wx.Dialog):
             self.Enable()
 
 
-class CreateChargeDialog(wx.Dialog):
+class CascadingEnable:
+    def Disable(self):
+        for c in self.GetChildren():
+            c.Disable()
+        super().Disable()
+
+    def Enable(self):
+        for c in self.GetChildren():
+            c.Enable()
+        super().Enable()
+
+
+class CreateChargeDialog(CascadingEnable, wx.Dialog):
     def __init__(self, *args, **kwargs):
         self.customer = kwargs.pop('customer')
         self.cards = kwargs.pop('cards')
@@ -731,7 +743,7 @@ class CreateChargeDialog(wx.Dialog):
             self.Enable()
 
 
-class CreateRefundDialog(wx.Dialog):
+class CreateRefundDialog(CascadingEnable, wx.Dialog):
     def __init__(self, *args, **kwargs):
         self.charge = kwargs.pop('charge')
         super(CreateRefundDialog, self).__init__(*args, **kwargs)
